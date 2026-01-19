@@ -3,6 +3,7 @@ import feedparser
 import urllib.parse
 from datetime import datetime
 import pytz
+import requests
 from itertools import zip_longest
 from newspaper import Article
 
@@ -47,27 +48,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 2. Helper Functions
-@st.cache_data(ttl=3600) # Cache to avoid re-fetching the same article text in one session
 @st.cache_data(ttl=3600)
 def get_article_preview(url):
     try:
-        # Configuration to bypass some basic bot blocks
-        article = Article(url, keep_article_html=False)
+        # Step 1: Follow the Google News redirect to get the REAL URL
+        # We use a timeout and allow_redirects=True to find the final destination
+        response = requests.get(url, timeout=5, allow_redirects=True)
+        real_url = response.url 
         
-        # Add a User-Agent so websites think it's a browser
+        # Step 2: Scrape the actual article
+        article = Article(real_url)
         article.download()
-        
-        # If the first download is too short/empty, the link might be a redirect
         article.parse()
         
-        # Validation: If newspaper failed to find text, try to show the metadata description
-        if len(article.text) < 50:
-             # Fallback: some RSS feeds have a summary in the entry itself
-             return "Preview unavailable for this specific source, but you can read the full story via the link below."
-             
+        if len(article.text) < 100:
+            return "The publisher has restricted automated previews. Please use the source link below."
+            
         return article.text[:600] + "..."
     except Exception as e:
-        return f"Note: This source is protecting its content from automated previews. Please use the link below."
+        return "Preview unavailable. This source might be behind a paywall or blocking scrapers."
 
 # 3. Language Localization Dictionary
 lang_options = {
