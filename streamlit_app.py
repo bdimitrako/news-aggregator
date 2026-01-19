@@ -1,40 +1,45 @@
 import streamlit as st
 import feedparser
+from datetime import datetime
+import pytz
 
-# Set layout to wide to use the full width of the screen
+# 1. Set Page and Timezone
 st.set_page_config(layout="wide", page_title="GR/EU News Hub")
+greece_tz = pytz.timezone('Europe/Athens')
+current_time = datetime.now(greece_tz).strftime("%H:%M:%S")
 
 st.title("🗞️ News Dashboard: Greece & Europe")
+st.caption(f"Greek Local Time: {current_time} (Athens)")
 
-# Optional Search Bar at the top
-search_query = st.text_input("Search (leave blank for all top news):", "")
-
-# Define Feeds
+# 2. Define Feeds
 sources = {
-    "Greece": f"https://news.google.com/rss/search?q={search_query}+Greece+news&hl=en-GR&gl=GR",
-    "Europe": f"https://news.google.com/rss/search?q={search_query}+Europe+news&hl=en-150&gl=GR"
+    "Greece": "https://news.google.com/rss/search?q=Greece+news&hl=en-GR&gl=GR",
+    "Europe": "https://news.google.com/rss/search?q=Europe+news&hl=en-150&gl=GR"
 }
 
-# 1. Create two equal columns
-col1, col2 = st.columns(2)
+# Fetch data
+feed_gr = feedparser.parse(sources["Greece"]).entries[:10]
+feed_eu = feedparser.parse(sources["Europe"]).entries[:10]
 
-def display_feed(container, url, label):
-    feed = feedparser.parse(url)
-    container.header(label)
+# 3. Create Header Row
+h_col1, h_col2 = st.columns(2)
+h_col1.header("🇬🇷 Greece")
+h_col2.header("🇪🇺 Europe")
+st.divider()
+
+# 4. Grid Alignment (The "Row" Trick)
+# We loop through both lists at the same time to force alignment
+for gr_item, eu_item in zip(feed_gr, feed_eu):
+    col1, col2 = st.columns(2)
     
-    if not feed.entries:
-        container.warning("No articles found.")
-        return
-        
-    for entry in feed.entries[:10]:
-        # Using markdown with standard text size for uniformity
-        container.markdown(f"**[{entry.title}]({entry.link})**")
-        container.caption(f"📅 {entry.published if 'published' in entry else 'Recent'}")
-        container.divider()
+    with col1:
+        # Greece News
+        st.markdown(f"**[{gr_item.title}]({gr_item.link})**")
+        st.caption(f"Source: {gr_item.source.title if 'source' in gr_item else 'News'}")
 
-# 2. Assign Greece to the left and Europe to the right
-with col1:
-    display_feed(st, sources["Greece"], "🇬🇷 Greece")
-
-with col2:
-    display_feed(st, sources["Europe"], "🇪🇺 Europe")
+    with col2:
+        # Europe News
+        st.markdown(f"**[{eu_item.title}]({eu_item.link})**")
+        st.caption(f"Source: {eu_item.source.title if 'source' in eu_item else 'News'}")
+    
+    st.divider()
