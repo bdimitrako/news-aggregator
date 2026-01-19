@@ -1,14 +1,13 @@
 import streamlit as st
 import feedparser
-from datetime import datetime
 
-st.set_page_config(page_title="GR/EU News Hub", page_icon="🗞️")
+# Set layout to wide to use the full width of the screen
+st.set_page_config(layout="wide", page_title="GR/EU News Hub")
 
-st.title("🇪🇺 Live News: Greece & Europe")
-st.caption(f"Last checked: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.title("🗞️ News Dashboard: Greece & Europe")
 
-# User Search Input
-search_query = st.text_input("Search specific topics (e.g., 'Economy', 'Energy', 'Olympiacos'):", "")
+# Optional Search Bar at the top
+search_query = st.text_input("Search (leave blank for all top news):", "")
 
 # Define Feeds
 sources = {
@@ -16,20 +15,26 @@ sources = {
     "Europe": f"https://news.google.com/rss/search?q={search_query}+Europe+news&hl=en-150&gl=GR"
 }
 
-tab1, tab2 = st.tabs(["🇬🇷 Greece", "🇪🇺 Europe"])
+# 1. Create two equal columns
+col1, col2 = st.columns(2)
 
-def display_feed(url):
+def display_feed(container, url, label):
     feed = feedparser.parse(url)
+    container.header(label)
+    
     if not feed.entries:
-        st.warning("No news found for this search.")
-    for entry in feed.entries[:12]:
-        with st.container():
-            st.markdown(f"### [{entry.title}]({entry.link})")
-            st.write(f"📅 {entry.published if 'published' in entry else 'Just now'}")
-            st.divider()
+        container.warning("No articles found.")
+        return
+        
+    for entry in feed.entries[:10]:
+        # Using markdown with standard text size for uniformity
+        container.markdown(f"**[{entry.title}]({entry.link})**")
+        container.caption(f"📅 {entry.published if 'published' in entry else 'Recent'}")
+        container.divider()
 
-with tab1:
-    display_feed(sources["Greece"])
+# 2. Assign Greece to the left and Europe to the right
+with col1:
+    display_feed(st, sources["Greece"], "🇬🇷 Greece")
 
-with tab2:
-    display_feed(sources["Europe"])
+with col2:
+    display_feed(st, sources["Europe"], "🇪🇺 Europe")
