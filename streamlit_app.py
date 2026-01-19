@@ -3,124 +3,133 @@ import feedparser
 import urllib.parse
 from datetime import datetime
 import pytz
-from itertools import zip_longest
 
-# 1. Config & Enhanced Mobile Styling
+# 1. Page Configuration
 st.set_page_config(layout="wide", page_title="News Hub", page_icon="🗞️")
 
-st.markdown("""
-    <style>
-    /* Fix mobile padding */
-    .block-container { 
-        padding-top: 1.5rem; 
-        padding-left: 1rem !important; 
-        padding-right: 1rem !important; 
-    }
-    
-    /* Better News Cards */
-    .news-card { 
-        padding: 18px; 
-        border-radius: 12px; 
-        margin-bottom: 15px; 
-        border: 1px solid #30363d; 
-        background-color: #161b22;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    /* Title Styling - Ensures no overflow */
-    .news-title { 
-        font-size: 1.15rem; 
-        font-weight: 600; 
-        text-decoration: none; 
-        color: #58a6ff !important; 
-        line-height: 1.4;
-        word-wrap: break-word;
-        margin-bottom: 8px;
-    }
-    
-    .timestamp { 
-        font-size: 0.85rem; 
-        color: #8b949e; 
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-    }
+# 2. Feedly Branding & Custom CSS
+FEEDLY_GREEN = "#2bb24c"
 
-    /* FORCING STACK ON MOBILE */
-    @media (max-width: 800px) {
-        [data-testid="column"] {
-            width: 100% !important;
-            flex: 1 1 100% !important;
-            padding: 0 !important;
-            margin-bottom: 10px;
-        }
-    }
+st.markdown(f"""
+    <style>
+    /* Clean white background like Feedly */
+    .stApp {{ background-color: #ffffff; color: #333; }}
+    
+    /* Header styling with Feedly Green underlines */
+    .section-header {{
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #1e1e1e;
+        border-bottom: 2px solid {FEEDLY_GREEN};
+        padding-bottom: 8px;
+        margin-top: 20px;
+        margin-bottom: 15px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }}
+
+    /* Feedly List Row */
+    .feedly-row {{
+        padding: 10px 0;
+        border-bottom: 1px solid #eef0f2;
+        transition: background 0.2s;
+    }}
+    .feedly-row:hover {{ background-color: #f9f9f9; }}
+
+    /* Title: Bold, No Underline */
+    .news-title {{
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #222 !important;
+        text-decoration: none !important;
+        display: block;
+        line-height: 1.4;
+        margin-bottom: 4px;
+    }}
+    .news-title:hover {{ color: {FEEDLY_GREEN} !important; }}
+
+    /* Metadata: Grey text, Site name on the left */
+    .metadata {{
+        font-size: 0.85rem;
+        color: #888;
+        display: flex;
+        align-items: center;
+    }}
+    .source-site {{
+        font-weight: 600;
+        color: #555;
+        margin-right: 10px;
+        text-transform: lowercase;
+    }}
+
+    /* Styling the Toggle Switch to match Feedly colors */
+    div[data-testid="stToggle"] > label > div[role="switch"][aria-checked="true"] {{
+        background-color: {FEEDLY_GREEN} !important;
+    }}
+
+    /* Mobile: Ensure columns stack correctly */
+    @media (max-width: 800px) {{
+        [data-testid="column"] {{ width: 100% !important; flex: 1 1 100% !important; }}
+    }}
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Language Options
-lang_options = {
-    "English": {
-        "title": "🗞️ News Hub", 
-        "greece": "🇬🇷 Greece", 
-        "europe": "🇪🇺 Europe", 
-        "posted": "Posted",
-        "search": "🔍 Search topics...",
-        "gr_lang": "en-GR", 
-        "gr_gl": "GR"
-    },
-    "Ελληνικά": {
-        "title": "🗞️ Ενημέρωση", 
-        "greece": "🇬🇷 Ελλάδα", 
-        "europe": "🇪🇺 Ευρώπη", 
-        "posted": "Δημοσιεύτηκε",
-        "search": "🔍 Αναζήτηση θεμάτων...",
-        "gr_lang": "el", 
-        "gr_gl": "GR"
-    }
+# 3. Language Toggle & Header
+header_col, toggle_col = st.columns([4, 1])
+
+with header_col:
+    st.markdown("<h1 style='margin:0; font-weight:900;'>News Hub</h1>", unsafe_allow_html=True)
+
+with toggle_col:
+    # Toggle switch with EN/GR label
+    is_gr = st.toggle("EN / GR", value=False)
+    lang_key = "Ελληνικά" if is_gr else "English"
+
+# 4. Data Config
+lang_map = {
+    "English": {"gr": "GR Greece", "eu": "EU Europe", "hl": "en-GR", "gl": "GR"},
+    "Ελληνικά": {"gr": "GR Ελλάδα", "eu": "EU Ευρώπη", "hl": "el", "gl": "GR"}
 }
+L = lang_map[lang_key]
 
-# 3. Sidebar & Time
-st.sidebar.title("Settings")
-selected_lang = st.sidebar.selectbox("Language / Γλώσσα", ["English", "Ελληνικά"])
-L = lang_options[selected_lang]
-athens_tz = pytz.timezone('Europe/Athens')
-
-def format_date(struct_time):
-    if not struct_time: return "Recently"
-    dt = datetime(*struct_time[:6], tzinfo=pytz.utc).astimezone(athens_tz)
-    return dt.strftime("%d %b, %H:%M")
-
-# 4. Search & Fetch
-st.title(L["title"])
-search_query = st.text_input(L["search"], "")
-safe_query = urllib.parse.quote_plus(search_query)
-
+# 5. Fetching (RSS)
 sources = {
-    "Greece": f"https://news.google.com/rss/search?q={safe_query}+Greece&hl={L['gr_lang']}&gl={L['gr_gl']}",
-    "Europe": f"https://news.google.com/rss/search?q={safe_query}+Europe&hl=en-150&gl=GR"
+    "Greece": f"https://news.google.com/rss/search?q=Greece&hl={L['hl']}&gl={L['gl']}",
+    "Europe": f"https://news.google.com/rss/search?q=Europe&hl=en-150&gl=GR"
 }
 
-feed_gr = feedparser.parse(sources["Greece"]).entries[:12]
-feed_eu = feedparser.parse(sources["Europe"]).entries[:12]
+feed_gr = feedparser.parse(sources["Greece"]).entries[:15]
+feed_eu = feedparser.parse(sources["Europe"]).entries[:15]
 
-# 5. The Grid
-col_left, col_right = st.columns(2)
+# 6. Render the "Feedly" View
+col1, col2 = st.columns(2)
 
-def render_item(entry):
+def render_feedly_style(entry):
     if not entry: return
-    time_str = format_date(entry.get('published_parsed'))
-    # Using a clean div structure instead of expanders for a faster mobile feel
+    # Split "Title - Site Name" usually provided by Google News
+    title_parts = entry.title.rsplit(" - ", 1)
+    title = title_parts[0]
+    site = title_parts[1] if len(title_parts) > 1 else "news"
+    
+    # Simple timestamp extraction
+    time_str = entry.published.split(' ')[4][:5] if 'published' in entry else "now"
+
     st.markdown(f"""
-        <div class="news-card">
-            <a class="news-title" href="{entry.link}" target="_blank">{entry.title}</a>
-            <div class="timestamp">🕒 {L['posted']}: {time_str}</div>
+        <div class="feedly-row">
+            <a class="news-title" href="{entry.link}" target="_blank">{title}</a>
+            <div class="metadata">
+                <span class="source-site">{site}</span>
+                <span>/ {time_str}</span>
+            </div>
         </div>
     """, unsafe_allow_html=True)
 
-with col_left:
-    st.subheader(L["greece"])
-    for item in feed_gr: render_item(item)
+with col1:
+    st.markdown(f"<div class='section-header'>{L['gr']}</div>", unsafe_allow_html=True)
+    for entry in feed_gr:
+        render_feedly_style(entry)
 
-with col_right:
-    st.subheader(L["europe"])
-    for item in feed_eu: render_item(item)
+with col2:
+    st.markdown(f"<div class='section-header'>{L['eu']}</div>", unsafe_allow_html=True)
+    for entry in feed_eu:
+        render_feedly_style(entry)
