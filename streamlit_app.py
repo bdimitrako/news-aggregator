@@ -4,6 +4,8 @@ import urllib.parse
 from datetime import datetime
 import pytz
 import requests
+import base64
+import re
 from itertools import zip_longest
 from newspaper import Article
 
@@ -49,24 +51,43 @@ st.markdown("""
 
 # 2. Helper Functions
 @st.cache_data(ttl=3600)
-def get_article_preview(url):
+def get_article_preview(google_url):
     try:
-        # Step 1: Follow the Google News redirect to get the REAL URL
-        # We use a timeout and allow_redirects=True to find the final destination
-        response = requests.get(url, timeout=5, allow_redirects=True)
-        real_url = response.url 
+        # 1. Decode the Google "masked" URL to find the real source
+        # Google News RSS links often contain the real URL base64 encoded
+        if "articles/" in google_url:
+            suffix = google_url.split("articles/")[1].split("?")[0]
+            # This is a common pattern for Google News base64 encoding
+            try:
+                # We try to pad the string to make it valid base64
+                decoded_bytes = base64.urlsafe_b64decode(suffix + '==')
+                # Use regex to find the first string that looks like a URL
+                match = re.search(rb'https?://[^\s<>"]+', decoded_bytes)
+                if match:
+                    url = match.group().decode('utf-8')
+                else:
+                    url = google_url
+            except:
+                url = google_url
+        else:
+            url = google_url
+
+        # 2. Fetch with a "Real Browser" header
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        }
         
-        # Step 2: Scrape the actual article
-        article = Article(real_url)
-        article.download()
+        # 3. Download and Parse
+        article = Article(url)
+        article.download(input_html=requests.get(url, headers=headers, timeout=10).text)
         article.parse()
         
         if len(article.text) < 100:
-            return "The publisher has restricted automated previews. Please use the source link below."
+            return "⚠️ The publisher is blocking automated previews. Use the link below to read."
             
         return article.text[:600] + "..."
     except Exception as e:
-        return "Preview unavailable. This source might be behind a paywall or blocking scrapers."
+        return "❌ Preview failed. The site might be protected or require a subscription."
 
 # 3. Language Localization Dictionary
 lang_options = {
