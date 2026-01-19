@@ -16,7 +16,7 @@ st.markdown(f"""
     <style>
     .stApp {{ background-color: {DARK_BG}; color: #fafafa; }}
     
-    /* Typography */
+    /* Headlines: Bold White, Green on Hover */
     .news-title {{
         font-size: 1.05rem;
         font-weight: 700;
@@ -43,21 +43,34 @@ st.markdown(f"""
 
     .feedly-row {{ padding: 12px 0; border-bottom: 1px solid {BORDER_GREY}; }}
 
-    /* STYLING THE TOGGLE BUTTONS - REMOVING ALL RED */
+    /* --- NUCLEAR CSS TO REMOVE RED FROM BUTTONS --- */
+    /* Target the primary button container */
     button[data-testid="baseButton-primary"] {{
         background-color: {FEEDLY_GREEN} !important;
-        color: white !important;
         border: 1px solid {FEEDLY_GREEN} !important;
-        box-shadow: none !important;
+        color: white !important;
     }}
     
+    /* Target the text inside the primary button (Streamlit often forces red here) */
+    button[data-testid="baseButton-primary"] p {{
+        color: white !important;
+    }}
+
+    /* Target the hover state so it doesn't flash red */
+    button[data-testid="baseButton-primary"]:hover {{
+        background-color: #248f3d !important;
+        border-color: #248f3d !important;
+        color: white !important;
+    }}
+
+    /* Secondary button (Inactive) */
     button[data-testid="baseButton-secondary"] {{
         background-color: transparent !important;
         color: #8b949e !important;
         border: 1px solid {BORDER_GREY} !important;
     }}
-
-    /* Search Bar Custom Colors */
+    
+    /* Search Bar Input */
     div[data-testid="stTextInput"] input {{
         background-color: #161b22;
         border: 1px solid {BORDER_GREY};
@@ -66,13 +79,14 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Header & State
+# 2. State & Time
 if "lang" not in st.session_state:
     st.session_state.lang = "EN"
 
 athens_tz = pytz.timezone('Europe/Athens')
 now = datetime.now(athens_tz)
 
+# Top Bar Layout
 head_col, search_col, toggle_col = st.columns([1.5, 2, 1.2])
 
 with head_col:
@@ -80,13 +94,14 @@ with head_col:
     st.markdown(f"<span style='color:#8b949e; font-size:0.9rem;'>{now.strftime('%a, %d %b | %H:%M')}</span>", unsafe_allow_html=True)
 
 with search_col:
-    st.write("##")
+    st.write("##") # Spacer
     search_query = st.text_input("", placeholder="Search topics...", label_visibility="collapsed")
-    st.markdown(f"<div style='text-align:right; font-size:0.7rem; color:#444;'>Updated: {now.strftime('%H:%M:%S')}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:right; font-size:0.7rem; color:#444;'>Sync: {now.strftime('%H:%M:%S')}</div>", unsafe_allow_html=True)
 
 with toggle_col:
-    st.write("##")
+    st.write("##") # Spacer
     c1, c2 = st.columns(2)
+    # The active button gets 'primary' (now Green), inactive gets 'secondary'
     with c1:
         if st.button("🇬🇧 EN", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
             st.session_state.lang = "EN"
@@ -96,31 +111,39 @@ with toggle_col:
             st.session_state.lang = "GR"
             st.rerun()
 
-# 3. Data
+# 3. Data Logic
 L = {
     "EN": {"gr": "GR Greece", "eu": "EU Europe", "hl": "en-GR", "gl": "GR"},
     "GR": {"gr": "GR Ελλάδα", "eu": "EU Ευρώπη", "hl": "el", "gl": "GR"}
 }[st.session_state.lang]
 
 @st.cache_data(ttl=600)
-def get_news(q, hl, gl):
-    safe_q = urllib.parse.quote_plus(q)
-    return feedparser.parse(f"https://news.google.com/rss/search?q={safe_q}&hl={hl}&gl={gl}").entries[:15]
+def fetch_news(query, hl, gl):
+    q = urllib.parse.quote_plus(query)
+    # Added ceid parameter for better Google News routing
+    url = f"https://news.google.com/rss/search?q={q}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
+    return feedparser.parse(url).entries[:15]
 
-feed_gr = get_news(f"{search_query} Greece", L['hl'], L['gl'])
-feed_eu = get_news(f"{search_query} Europe", "en-150", "GR")
+# Using search query if entered, otherwise defaults
+feed_gr = fetch_news(f"{search_query} Greece" if search_query else "Greece", L['hl'], L['gl'])
+feed_eu = fetch_news(f"{search_query} Europe" if search_query else "Europe", "en-150", "GR")
 
-# 4. Rendering
+# 4. Rendering List
 def render_item(entry):
     parts = entry.title.rsplit(" - ", 1)
-    title, site = (parts[0], parts[1]) if len(parts) > 1 else (entry.title, "news")
-    dt_str = datetime.fromtimestamp(time.mktime(entry.published_parsed)).strftime("%d %b, %H:%M") if 'published_parsed' in entry else ""
+    title, site = (parts[0], parts[1]) if len(parts) > 1 else (entry.title, "source")
+    
+    if 'published_parsed' in entry:
+        dt = datetime.fromtimestamp(time.mktime(entry.published_parsed))
+        date_str = dt.strftime("%d %b, %H:%M")
+    else:
+        date_str = "just now"
 
     st.markdown(f"""
         <div class="feedly-row">
             <a class="news-title" href="{entry.link}" target="_blank">{title}</a>
             <div class="metadata">
-                <span class="source-site">{site}</span> • {dt_str}
+                <span class="source-site">{site}</span> • {date_str}
             </div>
         </div>
     """, unsafe_allow_html=True)
