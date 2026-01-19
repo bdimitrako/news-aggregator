@@ -14,18 +14,20 @@ st.markdown(f"""
     <style>
     .stApp {{ background-color: #0e1117; color: #fafafa; }}
     
-    /* NUCLEAR COLOR FIX: Target the button and its nested p tag to remove red */
-    button[data-testid="baseButton-primary"] {{
+    /* NUCLEAR FIX: This specifically targets the Streamlit button container to kill the red */
+    div[data-testid="stBaseButton-buttonPrimary"] {{
         background-color: {FEEDLY_GREEN} !important;
         border: 1px solid {FEEDLY_GREEN} !important;
         color: white !important;
     }}
     
-    /* Fix the labels: ensure text inside buttons is white and centered */
-    button[data-testid="baseButton-primary"] p, 
-    button[data-testid="baseButton-secondary"] p {{
+    /* Fix labels: This prevents the text from being pushed or squashed */
+    div[data-testid="stBaseButton-buttonPrimary"] p, 
+    div[data-testid="stBaseButton-buttonSecondary"] p {{
         color: inherit !important;
         margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
         font-weight: 700 !important;
     }}
 
@@ -55,7 +57,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Header & Logic
+# 2. Header & State
 if "lang" not in st.session_state:
     st.session_state.lang = "EN"
 
@@ -75,34 +77,32 @@ with c2:
 with c3:
     st.write("##")
     l_col1, l_col2 = st.columns(2)
-    # Using your exact flag labels
     with l_col1:
-        if st.button("🇬🇧 EN", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
+        # Changed labels to just EN and GR to ensure they fit perfectly in the button
+        if st.button("EN", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
             st.session_state.lang = "EN"
             st.rerun()
     with l_col2:
-        if st.button("🇬🇷 GR", type="primary" if st.session_state.lang == "GR" else "secondary", use_container_width=True):
+        if st.button("GR", type="primary" if st.session_state.lang == "GR" else "secondary", use_container_width=True):
             st.session_state.lang = "GR"
             st.rerun()
 
-# 3. Data
+# 3. Data Loading
 L = {"EN": {"hl": "en-GR", "gl": "GR"}, "GR": {"hl": "el", "gl": "GR"}}[st.session_state.lang]
 
 @st.cache_data(ttl=600)
 def get_news(q, hl, gl):
-    # Standardizing Google News RSS params
     url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
     return feedparser.parse(url).entries[:15]
 
 f_gr = get_news(f"{search_query} Greece", L['hl'], L['gl'])
 f_eu = get_news(f"{search_query} Europe", "en-150", "GR")
 
-# 4. Render
+# 4. Content Rendering
 def render(entry):
     parts = entry.title.rsplit(" - ", 1)
     title = parts[0]
     site = parts[1] if len(parts) > 1 else "news"
-    # Cleaner date display
     date_part = entry.published[5:16] if 'published' in entry else ""
     
     st.markdown(f"""
