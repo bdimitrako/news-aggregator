@@ -5,21 +5,17 @@ from datetime import datetime
 import pytz
 import time
 
-# 1. Page Config
+# 1. Page Config & Dark Theme CSS
 st.set_page_config(layout="wide", page_title="News Hub", page_icon="🗞️")
 
-# 2. Feedly Branding & Dark Theme CSS
 FEEDLY_GREEN = "#2bb24c"
 FEEDLY_GREY = "#30363d"
 
 st.markdown(f"""
     <style>
+    /* Dark Theme & Typography */
     .stApp {{ background-color: #0e1117; color: #fafafa; }}
     
-    /* Header & Top Bar */
-    .top-bar {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }}
-    
-    /* Feedly Typography: White titles, Green on Hover */
     .news-title {{
         font-size: 1.05rem;
         font-weight: 700;
@@ -35,7 +31,7 @@ st.markdown(f"""
     .source-site {{ font-weight: 600; color: #c9d1d9; margin-right: 10px; text-transform: lowercase; }}
 
     .section-header {{
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         font-weight: 800;
         color: #8b949e;
         border-bottom: 1px solid {FEEDLY_GREY};
@@ -48,64 +44,71 @@ st.markdown(f"""
 
     .feedly-row {{ padding: 12px 0; border-bottom: 1px solid {FEEDLY_GREY}; }}
 
-    /* Custom Search Input Styling */
+    /* Fix Search Bar Colors */
     div[data-testid="stTextInput"] input {{
         background-color: #161b22;
         border: 1px solid #30363d;
         color: white;
-        border-radius: 4px;
+    }}
+
+    /* Remove the red 'Primary' button color and force Feedly Green */
+    button[kind="primary"] {{
+        background-color: {FEEDLY_GREEN} !important;
+        border: none !important;
+        color: white !important;
     }}
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Header: Clock, Search, and Toggle
+# 2. Top Header & Clock
 athens_tz = pytz.timezone('Europe/Athens')
 now_athens = datetime.now(athens_tz).strftime("%a, %d %b | %H:%M")
 
-# Create a clean top layout
-row1_col1, row1_col2, row1_col3 = st.columns([2, 2, 1])
+head_col, search_col, toggle_col = st.columns([1.5, 2, 1.2])
 
-with row1_col1:
+with head_col:
     st.markdown(f"<h2 style='margin:0;'>🗞️ News Hub</h2>", unsafe_allow_html=True)
     st.markdown(f"<span style='color:#8b949e; font-size:0.9rem;'>{now_athens}</span>", unsafe_allow_html=True)
 
-with row1_col2:
+with search_col:
+    st.write("##") # Alignment
     search_query = st.text_input("", placeholder="Search topics...", label_visibility="collapsed")
 
-with row1_col3:
-    # Custom Binary Toggle Button Logic
+with toggle_col:
+    st.write("##") # Alignment
     if "lang" not in st.session_state:
         st.session_state.lang = "EN"
     
-    # Render two small columns for the EN/GR switch
-    sw1, sw2 = st.columns(2)
-    with sw1:
-        if st.button("EN", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
+    # Custom Flag Switch Logic
+    c1, c2 = st.columns(2)
+    with c1:
+        en_label = "🇬🇧 EN" if st.session_state.lang == "EN" else "EN"
+        if st.button(en_label, kind="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
             st.session_state.lang = "EN"
             st.rerun()
-    with sw2:
-        if st.button("GR", type="primary" if st.session_state.lang == "GR" else "secondary", use_container_width=True):
+    with c2:
+        gr_label = "🇬🇷 GR" if st.session_state.lang == "GR" else "GR"
+        if st.button(gr_label, kind="primary" if st.session_state.lang == "GR" else "secondary", use_container_width=True):
             st.session_state.lang = "GR"
             st.rerun()
 
-# 4. Data Logic
+# 3. Data Config
 lang_key = st.session_state.lang
-lang_map = {
+L = {
     "EN": {"gr": "GR Greece", "eu": "EU Europe", "hl": "en-GR", "gl": "GR"},
     "GR": {"gr": "GR Ελλάδα", "eu": "EU Ευρώπη", "hl": "el", "gl": "GR"}
-}
-L = lang_map[lang_key]
+}[lang_key]
 
 @st.cache_data(ttl=600)
-def get_news(query, hl, gl):
+def fetch_data(query, hl, gl):
     q = urllib.parse.quote_plus(query)
-    base_url = f"https://news.google.com/rss/search?q={q}"
-    return feedparser.parse(f"{base_url}&hl={hl}&gl={gl}").entries[:15]
+    url = f"https://news.google.com/rss/search?q={q}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
+    return feedparser.parse(url).entries[:15]
 
-feed_gr = get_news(f"{search_query} Greece", L['hl'], L['gl'])
-feed_eu = get_news(f"{search_query} Europe", "en-150", "GR")
+feed_gr = fetch_data(f"{search_query} Greece", L['hl'], L['gl'])
+feed_eu = fetch_data(f"{search_query} Europe", "en-150", "GR")
 
-# 5. The List View
+# 4. Main Rendering
 def render_item(entry):
     parts = entry.title.rsplit(" - ", 1)
     title = parts[0]
