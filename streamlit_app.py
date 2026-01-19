@@ -6,7 +6,7 @@ import pytz
 import time
 
 # 1. Page Config
-st.set_page_config(layout="wide", page_title="News Hub", page_icon="🗞️")
+st.set_page_config(layout="wide", page_title="News Hub")
 
 FEEDLY_GREEN = "#2bb24c"
 
@@ -14,24 +14,7 @@ st.markdown(f"""
     <style>
     .stApp {{ background-color: #0e1117; color: #fafafa; }}
     
-    /* NUCLEAR FIX: This specifically targets the Streamlit button container to kill the red */
-    div[data-testid="stBaseButton-buttonPrimary"] {{
-        background-color: {FEEDLY_GREEN} !important;
-        border: 1px solid {FEEDLY_GREEN} !important;
-        color: white !important;
-    }}
-    
-    /* Fix labels: This prevents the text from being pushed or squashed */
-    div[data-testid="stBaseButton-buttonPrimary"] p, 
-    div[data-testid="stBaseButton-buttonSecondary"] p {{
-        color: inherit !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        line-height: 1 !important;
-        font-weight: 700 !important;
-    }}
-
-    /* Title & Row Styling */
+    /* Feedly Headlines */
     .news-title {{
         font-size: 1.05rem;
         font-weight: 700;
@@ -41,10 +24,8 @@ st.markdown(f"""
         margin-bottom: 4px;
     }}
     .news-title:hover {{ color: {FEEDLY_GREEN} !important; }}
-    
     .metadata {{ font-size: 0.85rem; color: #8b949e; }}
     .feedly-row {{ padding: 12px 0; border-bottom: 1px solid #30363d; }}
-    
     .section-header {{
         font-size: 0.9rem;
         font-weight: 800;
@@ -57,7 +38,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Header & State
+# 2. State & Header
 if "lang" not in st.session_state:
     st.session_state.lang = "EN"
 
@@ -78,7 +59,6 @@ with c3:
     st.write("##")
     l_col1, l_col2 = st.columns(2)
     with l_col1:
-        # Changed labels to just EN and GR to ensure they fit perfectly in the button
         if st.button("EN", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
             st.session_state.lang = "EN"
             st.rerun()
@@ -87,28 +67,41 @@ with c3:
             st.session_state.lang = "GR"
             st.rerun()
 
-# 3. Data Loading
+# 3. Data Fetching & Sorting Logic
 L = {"EN": {"hl": "en-GR", "gl": "GR"}, "GR": {"hl": "el", "gl": "GR"}}[st.session_state.lang]
 
 @st.cache_data(ttl=600)
-def get_news(q, hl, gl):
+def get_sorted_news(q, hl, gl):
     url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
-    return feedparser.parse(url).entries[:15]
+    feed = feedparser.parse(url)
+    entries = feed.entries
 
-f_gr = get_news(f"{search_query} Greece", L['hl'], L['gl'])
-f_eu = get_news(f"{search_query} Europe", "en-150", "GR")
+    # Sort entries by published_parsed (the raw time tuple provided by feedparser)
+    # Reverse=True puts the most recent (latest) items at the top
+    entries.sort(key=lambda x: x.get('published_parsed', 0), reverse=True)
+    
+    return entries[:20]
+
+f_gr = get_sorted_news(f"{search_query} Greece", L['hl'], L['gl'])
+f_eu = get_sorted_news(f"{search_query} Europe", "en-150", "GR")
 
 # 4. Content Rendering
 def render(entry):
     parts = entry.title.rsplit(" - ", 1)
     title = parts[0]
     site = parts[1] if len(parts) > 1 else "news"
-    date_part = entry.published[5:16] if 'published' in entry else ""
+    
+    # Format the date for display (e.g., "19 Jan, 18:30")
+    if 'published_parsed' in entry:
+        dt = datetime.fromtimestamp(time.mktime(entry.published_parsed))
+        date_str = dt.strftime("%d %b, %H:%M")
+    else:
+        date_str = ""
     
     st.markdown(f"""
         <div class="feedly-row">
             <a class="news-title" href="{entry.link}" target="_blank">{title}</a>
-            <div class="metadata"><b>{site}</b> • {date_part}</div>
+            <div class="metadata"><b>{site}</b> • {date_str}</div>
         </div>
     """, unsafe_allow_html=True)
 
