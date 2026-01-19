@@ -1,7 +1,9 @@
 import streamlit as st
 import feedparser
+import urllib.parse
 from datetime import datetime
 import pytz
+from itertools import zip_longest
 
 # 1. Dashboard Config
 st.set_page_config(layout="wide", page_title="GR/EU News Dashboard")
@@ -29,10 +31,13 @@ st.caption(f"Athens Local Time: {current_time}")
 search_query = st.text_input("🔍 Search topics (e.g. 'Economy', 'Sports', 'Energy')", placeholder="Type here and press Enter...")
 
 # 4. Data Fetching (Integrated with Search)
-# We encode the search query into the Google News RSS URL
+# --- FIX: Encode the query to handle spaces ---
+safe_query = urllib.parse.quote_plus(search_query) #
+
+# Data Fetching (Use safe_query instead of search_query)
 sources = {
-    "Greece": f"https://news.google.com/rss/search?q={search_query}+Greece+news&hl=en-GR&gl=GR",
-    "Europe": f"https://news.google.com/rss/search?q={search_query}+Europe+news&hl=en-150&gl=GR"
+    "Greece": f"https://news.google.com/rss/search?q={safe_query}+Greece+news&hl=en-GR&gl=GR",
+    "Europe": f"https://news.google.com/rss/search?q={safe_query}+Europe+news&hl=en-150&gl=GR"
 }
 
 feed_gr = feedparser.parse(sources["Greece"]).entries[:12]
