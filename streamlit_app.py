@@ -6,7 +6,7 @@ import pytz
 import time
 
 # 1. Page Config
-st.set_page_config(layout="wide", page_title="News Hub")
+st.set_page_config(layout="wide", page_title="News Hub", page_icon="🗞️")
 
 FEEDLY_GREEN = "#2bb24c"
 
@@ -14,13 +14,21 @@ st.markdown(f"""
     <style>
     .stApp {{ background-color: #0e1117; color: #fafafa; }}
     
-    /* NUCLEAR COLOR FIX: Force all primary buttons to Feedly Green, no red */
-    div[data-testid="stAppViewBlockContainer"] button[kind="primary"] {{
+    /* NUCLEAR COLOR FIX: Target the button and its nested p tag to remove red */
+    button[data-testid="baseButton-primary"] {{
         background-color: {FEEDLY_GREEN} !important;
         border: 1px solid {FEEDLY_GREEN} !important;
         color: white !important;
     }}
     
+    /* Fix the labels: ensure text inside buttons is white and centered */
+    button[data-testid="baseButton-primary"] p, 
+    button[data-testid="baseButton-secondary"] p {{
+        color: inherit !important;
+        margin: 0 !important;
+        font-weight: 700 !important;
+    }}
+
     /* Title & Row Styling */
     .news-title {{
         font-size: 1.05rem;
@@ -31,8 +39,10 @@ st.markdown(f"""
         margin-bottom: 4px;
     }}
     .news-title:hover {{ color: {FEEDLY_GREEN} !important; }}
+    
     .metadata {{ font-size: 0.85rem; color: #8b949e; }}
     .feedly-row {{ padding: 12px 0; border-bottom: 1px solid #30363d; }}
+    
     .section-header {{
         font-size: 0.9rem;
         font-weight: 800;
@@ -45,7 +55,10 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Header
+# 2. Header & Logic
+if "lang" not in st.session_state:
+    st.session_state.lang = "EN"
+
 athens_tz = pytz.timezone('Europe/Athens')
 now = datetime.now(athens_tz)
 
@@ -61,10 +74,8 @@ with c2:
 
 with c3:
     st.write("##")
-    if "lang" not in st.session_state: st.session_state.lang = "EN"
-    
-    # Simple Toggle with your exact labels
     l_col1, l_col2 = st.columns(2)
+    # Using your exact flag labels
     with l_col1:
         if st.button("🇬🇧 EN", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
             st.session_state.lang = "EN"
@@ -79,7 +90,9 @@ L = {"EN": {"hl": "en-GR", "gl": "GR"}, "GR": {"hl": "el", "gl": "GR"}}[st.sessi
 
 @st.cache_data(ttl=600)
 def get_news(q, hl, gl):
-    return feedparser.parse(f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl={hl}&gl={gl}").entries[:15]
+    # Standardizing Google News RSS params
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
+    return feedparser.parse(url).entries[:15]
 
 f_gr = get_news(f"{search_query} Greece", L['hl'], L['gl'])
 f_eu = get_news(f"{search_query} Europe", "en-150", "GR")
@@ -89,10 +102,13 @@ def render(entry):
     parts = entry.title.rsplit(" - ", 1)
     title = parts[0]
     site = parts[1] if len(parts) > 1 else "news"
+    # Cleaner date display
+    date_part = entry.published[5:16] if 'published' in entry else ""
+    
     st.markdown(f"""
         <div class="feedly-row">
             <a class="news-title" href="{entry.link}" target="_blank">{title}</a>
-            <div class="metadata"><b>{site}</b> • {entry.published[5:16] if 'published' in entry else ''}</div>
+            <div class="metadata"><b>{site}</b> • {date_part}</div>
         </div>
     """, unsafe_allow_html=True)
 
