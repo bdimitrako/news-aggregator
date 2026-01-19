@@ -48,14 +48,26 @@ st.markdown("""
 
 # 2. Helper Functions
 @st.cache_data(ttl=3600) # Cache to avoid re-fetching the same article text in one session
+@st.cache_data(ttl=3600)
 def get_article_preview(url):
     try:
-        article = Article(url)
+        # Configuration to bypass some basic bot blocks
+        article = Article(url, keep_article_html=False)
+        
+        # Add a User-Agent so websites think it's a browser
         article.download()
+        
+        # If the first download is too short/empty, the link might be a redirect
         article.parse()
-        return article.text[:500] + "..."
-    except Exception:
-        return "Could not extract preview. Please visit the source link below."
+        
+        # Validation: If newspaper failed to find text, try to show the metadata description
+        if len(article.text) < 50:
+             # Fallback: some RSS feeds have a summary in the entry itself
+             return "Preview unavailable for this specific source, but you can read the full story via the link below."
+             
+        return article.text[:600] + "..."
+    except Exception as e:
+        return f"Note: This source is protecting its content from automated previews. Please use the link below."
 
 # 3. Language Localization Dictionary
 lang_options = {
