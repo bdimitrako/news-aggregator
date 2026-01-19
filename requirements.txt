@@ -1,3 +1,5 @@
 streamlit
 feedparser
 pytz
+newspaper4k
+lxml_html_clean
