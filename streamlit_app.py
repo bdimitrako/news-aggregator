@@ -3,124 +3,112 @@ import feedparser
 import urllib.parse
 from datetime import datetime
 import pytz
-from itertools import zip_longest
+import time
 
-# 1. Config & Enhanced Mobile Styling
-st.set_page_config(layout="wide", page_title="News Hub", page_icon="🗞️")
+# 1. Page Config
+st.set_page_config(layout="wide", page_title="News Hub")
 
-st.markdown("""
+FEEDLY_GREEN = "#2bb24c"
+
+st.markdown(f"""
     <style>
-    /* Fix mobile padding */
-    .block-container { 
-        padding-top: 1.5rem; 
-        padding-left: 1rem !important; 
-        padding-right: 1rem !important; 
-    }
+    .stApp {{ background-color: #0e1117; color: #fafafa; }}
     
-    /* Better News Cards */
-    .news-card { 
-        padding: 18px; 
-        border-radius: 12px; 
-        margin-bottom: 15px; 
-        border: 1px solid #30363d; 
-        background-color: #161b22;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    /* Title Styling - Ensures no overflow */
-    .news-title { 
-        font-size: 1.15rem; 
-        font-weight: 600; 
-        text-decoration: none; 
-        color: #58a6ff !important; 
-        line-height: 1.4;
-        word-wrap: break-word;
-        margin-bottom: 8px;
-    }
-    
-    .timestamp { 
-        font-size: 0.85rem; 
-        color: #8b949e; 
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-    }
-
-    /* FORCING STACK ON MOBILE */
-    @media (max-width: 800px) {
-        [data-testid="column"] {
-            width: 100% !important;
-            flex: 1 1 100% !important;
-            padding: 0 !important;
-            margin-bottom: 10px;
-        }
-    }
+    /* Feedly Headlines */
+    .news-title {{
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #ffffff !important;
+        text-decoration: none !important;
+        display: block;
+        margin-bottom: 4px;
+    }}
+    .news-title:hover {{ color: {FEEDLY_GREEN} !important; }}
+    .metadata {{ font-size: 0.85rem; color: #8b949e; }}
+    .feedly-row {{ padding: 12px 0; border-bottom: 1px solid #30363d; }}
+    .section-header {{
+        font-size: 0.9rem;
+        font-weight: 800;
+        color: #8b949e;
+        border-bottom: 1px solid #30363d;
+        padding-bottom: 5px;
+        margin-bottom: 15px;
+        text-transform: uppercase;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Language Options
-lang_options = {
-    "English": {
-        "title": "🗞️ News Hub", 
-        "greece": "🇬🇷 Greece", 
-        "europe": "🇪🇺 Europe", 
-        "posted": "Posted",
-        "search": "🔍 Search topics...",
-        "gr_lang": "en-GR", 
-        "gr_gl": "GR"
-    },
-    "Ελληνικά": {
-        "title": "🗞️ Ενημέρωση", 
-        "greece": "🇬🇷 Ελλάδα", 
-        "europe": "🇪🇺 Ευρώπη", 
-        "posted": "Δημοσιεύτηκε",
-        "search": "🔍 Αναζήτηση θεμάτων...",
-        "gr_lang": "el", 
-        "gr_gl": "GR"
-    }
-}
+# 2. State & Header
+if "lang" not in st.session_state:
+    st.session_state.lang = "EN"
 
-# 3. Sidebar & Time
-st.sidebar.title("Settings")
-selected_lang = st.sidebar.selectbox("Language / Γλώσσα", ["English", "Ελληνικά"])
-L = lang_options[selected_lang]
 athens_tz = pytz.timezone('Europe/Athens')
+now = datetime.now(athens_tz)
 
-def format_date(struct_time):
-    if not struct_time: return "Recently"
-    dt = datetime(*struct_time[:6], tzinfo=pytz.utc).astimezone(athens_tz)
-    return dt.strftime("%d %b, %H:%M")
+c1, c2, c3 = st.columns([1.5, 2, 1.2])
 
-# 4. Search & Fetch
-st.title(L["title"])
-search_query = st.text_input(L["search"], "")
-safe_query = urllib.parse.quote_plus(search_query)
+with c1:
+    st.markdown(f"<h2 style='margin:0;'>🗞️ News Hub</h2>", unsafe_allow_html=True)
+    st.markdown(f"<span style='color:#8b949e;'>{now.strftime('%a, %d %b | %H:%M')}</span>", unsafe_allow_html=True)
 
-sources = {
-    "Greece": f"https://news.google.com/rss/search?q={safe_query}+Greece&hl={L['gr_lang']}&gl={L['gr_gl']}",
-    "Europe": f"https://news.google.com/rss/search?q={safe_query}+Europe&hl=en-150&gl=GR"
-}
+with c2:
+    st.write("##")
+    search_query = st.text_input("", placeholder="Search topics...", label_visibility="collapsed")
 
-feed_gr = feedparser.parse(sources["Greece"]).entries[:12]
-feed_eu = feedparser.parse(sources["Europe"]).entries[:12]
+with c3:
+    st.write("##")
+    l_col1, l_col2 = st.columns(2)
+    with l_col1:
+        if st.button("EN", type="primary" if st.session_state.lang == "EN" else "secondary", use_container_width=True):
+            st.session_state.lang = "EN"
+            st.rerun()
+    with l_col2:
+        if st.button("GR", type="primary" if st.session_state.lang == "GR" else "secondary", use_container_width=True):
+            st.session_state.lang = "GR"
+            st.rerun()
 
-# 5. The Grid
-col_left, col_right = st.columns(2)
+# 3. Data Fetching & Sorting Logic
+L = {"EN": {"hl": "en-GR", "gl": "GR"}, "GR": {"hl": "el", "gl": "GR"}}[st.session_state.lang]
 
-def render_item(entry):
-    if not entry: return
-    time_str = format_date(entry.get('published_parsed'))
-    # Using a clean div structure instead of expanders for a faster mobile feel
+@st.cache_data(ttl=600)
+def get_sorted_news(q, hl, gl):
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl={hl}&gl={gl}&ceid={gl}:{hl}"
+    feed = feedparser.parse(url)
+    entries = feed.entries
+
+    # Sort entries by published_parsed (the raw time tuple provided by feedparser)
+    # Reverse=True puts the most recent (latest) items at the top
+    entries.sort(key=lambda x: x.get('published_parsed', 0), reverse=True)
+    
+    return entries[:20]
+
+f_gr = get_sorted_news(f"{search_query} Greece", L['hl'], L['gl'])
+f_eu = get_sorted_news(f"{search_query} Europe", "en-150", "GR")
+
+# 4. Content Rendering
+def render(entry):
+    parts = entry.title.rsplit(" - ", 1)
+    title = parts[0]
+    site = parts[1] if len(parts) > 1 else "news"
+    
+    # Format the date for display (e.g., "19 Jan, 18:30")
+    if 'published_parsed' in entry:
+        dt = datetime.fromtimestamp(time.mktime(entry.published_parsed))
+        date_str = dt.strftime("%d %b, %H:%M")
+    else:
+        date_str = ""
+    
     st.markdown(f"""
-        <div class="news-card">
-            <a class="news-title" href="{entry.link}" target="_blank">{entry.title}</a>
-            <div class="timestamp">🕒 {L['posted']}: {time_str}</div>
+        <div class="feedly-row">
+            <a class="news-title" href="{entry.link}" target="_blank">{title}</a>
+            <div class="metadata"><b>{site}</b> • {date_str}</div>
         </div>
     """, unsafe_allow_html=True)
 
-with col_left:
-    st.subheader(L["greece"])
-    for item in feed_gr: render_item(item)
-
-with col_right:
-    st.subheader(L["europe"])
-    for item in feed_eu: render_item(item)
+col_gr, col_eu = st.columns(2)
+with col_gr:
+    st.markdown("<div class='section-header'>GR Greece</div>", unsafe_allow_html=True)
+    for e in f_gr: render(e)
+with col_eu:
+    st.markdown("<div class='section-header'>EU Europe</div>", unsafe_allow_html=True)
+    for e in f_eu: render(e)
